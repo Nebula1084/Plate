@@ -1,2 +1,22 @@
 \section{概述}
-概述
+本文旨在分析车牌识别整个流程中各个阶段的所有方法，主要分为车牌定位、字符分割以及字符识别。在多篇论文中作者们都提到，车牌检测在整个车牌定位、识别系统中是最耗费计算时间的，所以针对车牌定位有很多方法，其中许多算法都是由人脸识别算法改编而来。目前车牌定位的主要方法有以下几种。
+\begin{enumerate}
+\item
+对Viola \& Jones的经典论文\cite{rrt_face_detection}中的基于AdaBoost的人脸检测系统的推广，Louka的论文\cite{plate_dection_using_adaboost}与论文\cite{rtl_plate_recoginition_on_edsp}，包括国内的一些论文都是通过对Viola \& Jones提出的人脸检测framework、对特征选择、对Adaboost算法进行改进来实现车牌监测的 。
+\item
+HOG方法与SVM方法相结合
+\item
+开源系统OpenALPR 使用了LBP算法(LBP算法通常用于人脸检测)以及SVM。
+\item
+extremal regions 方法（来自论文Unconstrained Licence Plate and Text Localization and Recognition）该方法主要用于检测任意国家的车牌，能很好地处理有遮挡、光线较差的情况。在07年的ACCV的一篇论文中，该方法被称为MSER(Maximally Stable Extremal Region)检测方法。这个方法的特别之处在于，它可以同时完成初步的字符分割与车牌检测两个任务。
+\item
+哈工大的一篇车牌定位与字符分割的硕士论文（于深洋），使用了粗定位与精确定位两个阶段，车牌粗定位使用了一种基于梯度空间下运用连通区域水平聚类分析的方法，此后的车牌精确定位阶段采用了基于车牌梯度宽度跳变分割和 HSV（Hue, Saturation, Value ）色彩分割的方法 。
+\item
+开源系统EasyPR提出了两种方法，
+（a）使用二值图像处理的一系列方法检测出垂直边缘（车牌区域垂直边缘多而密集），
+（b）颜色定位法，
+这两种方法相结合，找到一些可能为车牌的图块，再通过训练好的SVM模型进行最终判断。
+\end{enumerate}
+字符分割一般由对车牌图像进行预处理（去除边框、铆钉，颜色调整）、二值化、分割算法、后期处理（post-processing，optional）4个步骤组成，并且分割时一般会考虑先验知识（车牌的颜色、大小，字符的大小、位置等）。每个步骤都有一些常见方法。许多论文与开源系统都是这些常用方法的组合，并加上一些改进，或通过后处理进行调整。所以在这里首先简述每个步骤的常用方法。
+
+用于车牌字符识别的主要方法有两大类：分类器方法与模式、模板匹配方法。许多车牌识别系统中，会有Post processing的步骤，目的是提高识别的准确率。
