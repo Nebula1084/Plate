@@ -10,54 +10,113 @@ Viola and Jones 的人脸检测系统的主要贡献有三个:
 \item
 将分类器级联，使得显然的非人脸区域很快地被丢弃，而后面的分类器可以致力于区分那些更可能是人脸的区域。
 \end{enumerate}
-他们首先选择了一些相当简单的特征（features， reminiscent of Haar basis functions），他们认为，使用特征而不直接使用像素信息的重要原因是特征可以给出一些ad-hoc domain knowledge，而直接使用像素信息很难获得这些知识。另一方面，feature-based system比起pixel-based system也快得多。特征的示例见下图，他们使用的都是规则的长方形特征，特征的值为子窗口中黑白区域的像素值之和的差值。
+他们首先选择了一些相当简单的特征（reminiscent of Haar basis functions），他们认为，使用特征而不直接使用像素信息的重要原因是特征可以给出一些ad-hoc domain knowledge，而直接使用像素信息很难获得这些知识。另一方面，基于特征的系统比起基于像素的系统也快得多。特征的示例见下图，他们使用的都是规则的长方形特征，特征的值为子窗口中黑白区域的像素值之和的差值。
 \begin{figure}[H]
     \centering 
     \includegraphics[width=0.618\textwidth]{image/2_1_1_1.jpg}    
     \label{logic}
+    \caption{
+    样例的矩阵特征相对于检测窗口显示。白色矩阵之和减去灰色矩阵之和。二矩阵特征显示在(A)和(B)之中。(C)为三矩阵特征,(D)为四矩阵特征。
+    }
 \end{figure}
-对每一张待检测照片，计算出它的Integral Image，就可以很迅速地计算出每个检测子窗口上的各个特征的值。他们在总结中提到，为了实现真正的尺度不变性，几乎所有的人脸检测系统都需要对每一张待检测图片的多个尺度进行检测。使用Integral Image，就可以通过改变窗口大小、保持检测图片大小不变的方式，快速地对一张图片的各个尺度进行检测。
+对每一张待检测照片，计算出它的积分图像，就可以很迅速地计算出每个检测子窗口上的各个特征的值。他们在总结中提到，为了实现真正的尺度不变性，几乎所有的人脸检测系统都需要对每一张待检测图片的多个尺度进行检测。使用积分图像，就可以通过改变窗口大小、保持检测图片大小不变的方式，快速地对一张图片的各个尺度进行检测。
 
-为了提高检测系统的鲁棒性，配合Adaboost算法，首先生成一个非常巨大的矩形特征集。对于每一个特征，生成一个弱分类器：选择使得误判的样例数最少的阈值生成一个二元分类器。
+为了提高检测系统的鲁棒性，配合Adaboost\cite{boosting}算法，首先生成一个非常巨大的矩形特征集。对于每一个特征，生成一个弱分类器：选择使得误判的样例数最少的阈值生成一个二元分类器。
 
 
 然后使用Adaboost算法，选择非常少的弱分类器。Adaboost算法逐个选择加权误差最小的弱分类器，并且每添加一个特征，就更新样例的权重，使得被错误分类的样例获得更高的权重。最后生成一个强二元分类器，是选择出来的弱分类器的线性组合。Adaboost算法如下：
-\begin{figure}[H]
-    \centering 
-    \includegraphics[width=0.618\textwidth]{image/2_1_1_2.jpg}    
-    \label{logic}
-\end{figure}
+\begin{algorithm}
+    \caption{Adaboost}
+    \begin{algorithmic}[1] 
+    \State 给定数据图像$(x_1,y_1),...,(x_n,y_n)$,其中$y_i=0,1$，分别为负面和正面数据。
+    \State 对于${y_i=0,1}$分别初始化权重$w_{1,i}=\frac{1}{2m},\frac{1}{2l}$，其中$m$和$l$分别是负面数据和正面数据的数量。
+    \For{$i=1$ to $T$}
+    \State 标准化权重, $w_{t,i}\leftarrow \frac{w_{t,i}}{\sum_{j=1}^nw_{t,j}}$
+    \State 选择基于以下错误的最佳弱分类器$\epsilon_t=\min_{f,p,\theta}\sum_iw_i|h(x_i,f,p,\theta)-y_i|$
+    \State 定义$h_t(x)=h(x,f_t,p_t,\theta_t)$，其中$f_t$,$p_t$和$\theta_t$是$\epsilon_t$最小时的取值
+    \State 更新权重:
+    $$w_{t+1,i}=w{t,i}\beta_t^{1-e_i}$$
+    若$x_i$被分类正确,$e_i=0$,否则$e_i=1$,而$\beta_t=\frac{\epsilon_t}{1-\epsilon_t}$
+    \EndFor
+    \State 最终强分类器为:
+    $$C(x)=\left\{
+        \begin{aligned}
+            1 \quad & \sum_{t=1}^Ta_th_t(x)\geq \frac{1}{2}\sum_{t=1}^T\alpha_t\\
+            0 \quad & otherwise
+        \end{aligned}
+        \right.
+    $$
+    where $\alpha_t=\log\frac{1}{\beta_t}$
+    \end{algorithmic}
+\end{algorithm}
 其中，弱分类器的选择可以使用这样的算法：
 
 对于每一个特征，将样例按照特征的值排序，
 对于每一个排好序的样例，维护4个值：所有正样本的权重之和$T^+$，所有负样本的权重值和$T^-$，排在当前样例之前的正样本的权重之和$S^+$与排在当前样例之前的负样本的权重之和$S^-$。那么，以当前样例的特征的值作为阈值的弱分类器的误差为：
-$$e = \min(S+ + (T^- - S^-)， S^-  + ( T^+ - S^+))$$
-这样，每次选择最优弱分类器的时间复杂度为O(NK)， N为样本数，K为总特征数。
+$$e = \min(S^+ + (T^- - S^-), S^-  + ( T^+ - S^+))$$
+这样，每次选择最优弱分类器的时间复杂度为$O(NK)$， $N$为样本数，$K$为总特征数。
 另外，也可以证明adaboost算法的训练误差是可以被控制的：
-\begin{figure}[H]
-    \centering 
-    \includegraphics[width=0.618\textwidth]{image/2_1_1_3.jpg}    
-    \label{logic}
-\end{figure}
-其中，T为最终选择的特征的个数。
+\begin{algorithm}
+\caption{Adaboost误差}
+    \begin{algorithmic}[1] 
+    \State 运行AdaBoost
+    \State 让$\epsilon_t=\frac{1}{2}-\gamma_t$
+    \State 所以有
+    $$
+        \begin{aligned}
+            E_t(H_{final})& \leq \prod_t[2\sqrt{\epsilon_t(1-\epsilon_t)}]\\
+            & = \prod_t\sqrt{1-4\gamma_t^2}\\
+            & \leq \exp(-2\sum_t\gamma_t^2)
+        \end{aligned}
+    $$
+    \State 因此:$$
+        \begin{aligned}
+            &if \quad \forall t: \gamma_t \geq \gamma > 0\\
+            &then \quad E_t(H_{final}) \leq e^{-2\gamma^2T}
+        \end{aligned}
+    $$
+    \end{algorithmic}
+\end{algorithm}
+
+其中，$T$为最终选择的特征的个数。
 
 作者认为，Adaboost算法的关键优势在于它学习的速度，在于每一轮选择特征时，算法将已选择的特征的信息编码到了样例的权重中。
 
-另外，该系统使用了级联使用Adaboost得到的分类器，以提高检测能力并且减少计算时间。级联分类器的核心思想是首先使用更小的、更快速的分类器拒绝掉尽可能多的非人脸子窗口（在扫描过程中，绝大多数的子窗口中没有人脸），同时保留几乎所有的人脸子窗口（通过降低分类器的阈值），之后，使用更复杂的分类器来达到低false positive rates。决策的总体过程使用的是退化的决策树的形式，作者称其为“级联”。另外，后面的分类器接受训练时使用的是被前面的分类器所接受的样例（其中的非人脸样例更难区分），这样，他们可以解决更难的分类问题。级联分类器的运作过程如下图所示。
+另外，该系统使用了级联使用Adaboost得到的分类器，以提高检测能力并且减少计算时间。级联分类器的核心思想是首先使用更小的、更快速的分类器拒绝掉尽可能多的非人脸子窗口（在扫描过程中，绝大多数的子窗口中没有人脸），同时保留几乎所有的人脸子窗口（通过降低分类器的阈值），之后，使用更复杂的分类器来达到低加阳性率。决策的总体过程使用的是退化的决策树的形式，作者称其为“级联”。另外，后面的分类器接受训练时使用的是被前面的分类器所接受的样例（其中的非人脸样例更难区分），这样，他们可以解决更难的分类问题。级联分类器的运作过程如下图所示。
 \begin{figure}[H]
     \centering 
     \includegraphics[width=0.618\textwidth]{image/2_1_1_4.jpg}    
+    \caption{从语义上描述级联检测，一系列的分类器作用于每一个子窗口。其中初始分类器以非常少的处理解决掉大量的负面数据，接下来的分类器以额外的计算处理附加的负类。在几个阶段的处理之后，子窗口数量的彻底减少了。进一步的处理可以采取任何形式，比如额外的级联或是替代的检测系统。}
     \label{logic}
 \end{figure}
-级联检测器的训练算法如下图所示：
-\begin{figure}[H]
-    \centering 
-    \includegraphics[width=0.618\textwidth]{image/2_1_1_5.jpg}    
-    \label{logic}
-\end{figure}
+级联检测器的训练算法如下所示：
+\begin{algorithm}
+\caption{级联检测器训练算法}
+    \begin{algorithmic}[1]
+    \State 用户选择每层的最大假阳性接受率$f$和的最小检测接受率$d$
+    \State 用户选择全局的假阳性率$F_{target}$
+    \State $P$=阳性集合
+    \State $N$=阴性集合
+    \State $F_0=1.0;D_0=1.0$
+    \State $i=0$
+    \While{$F_i>F_{target}$}
+        \State $i \leftarrow i+1$
+        \State $n_i=0; F_i=F_{i-1}$
+        \While{$F_i>f\times F_{i-1}$}
+            \State $n_i\leftarrow n_i+1$
+            \State 使用AdaBoost以及$P$和$N$训练一个带有$n_i$个特征的分类器
+            \State 在验证集上评价级联测试器来决定$F_i$和$D_i$。
+            \State 降低第$i$个分类器的阈值，直到当前级联分类器的检测率最少为$d\times D_{i-1}$
+        \EndWhile
+        \State $N\leftarrow \emptyset$
+        \State 如果$F_i>F_{target}$， 则在非脸图像的集合上计算当前级联检测器，并将错误检测的图像放入集合$N$
+    \EndWhile
+    \end{algorithmic}
+\end{algorithm}
+
 最后，Viola和Jones在论文的结论中提到，初步的实验表明，其他物体的高效的检测器，如行人、车辆，也可以通过这种方式构建。
-\subsubsection{Chen 和 Yuille的Detecting and Reading Text in Natural Scenes}
-在这篇论文中，针对城市中随意拍摄到的文本，Chen和Yuille利用Viola 和 Jones的算法框架，根据文本区域的特征分析，选择了一些特征，送到AdaBoost machine中，获得级联的Adaboost分类器。最后使用商业OCR软件阅读文字。获得了超过90\%的正确率。
+\subsubsection{Detecting and Reading Text in Natural Scenes}
+在这篇论文中\cite{dr_natural_scenes}，针对城市中随意拍摄到的文本，Chen和Yuille利用Viola 和 Jones的算法框架，根据文本区域的特征分析，选择了一些特征，送到AdaBoost machine中，获得级联的Adaboost分类器。最后使用商业OCR软件阅读文字。获得了超过90\%的正确率。
 
 作者认为，特征集的选择对算法的成功与否与透明性至关重要。由于不同文本之间的空间差异性远远强于人脸，例如眼睛在人脸上的位置是相似的，不同人的眼睛也有一定相似性，而字母的位置、形状在不同文本中差异很大。通过PCA分析，文本有更多的非零特征值，文本需要150个components才能获得90\%的variance，而人脸只需要15个components。
 
@@ -66,16 +125,18 @@ $$e = \min(S+ + (T^- - S^-)， S^-  + ( T^+ - S^+))$$
     \centering 
     \includegraphics[width=0.618\textwidth]{image/2_1_1_6.jpg}    
     \label{logic}
+    \caption{$x$方向上的导数值在中间区域比较大，而 $y$方向上的导数值在顶部与底部比较大，$x$ 方
+向上的导数值的方差在中间区域比较大，而 $y$ 方向上的方差普遍比较小（低熵值）}
 \end{figure}
-他们发现，x方向上的导数值在中间区域比较大，而y方向上的导数值在顶部与底部比较大，x方向上的导数值的方差在中间区域比较大，而y方向上的方差普遍比较小（低熵值）。
 
-他们选择的第一类特征基于上述观察结果，设计了对应于x， y方向上导数的块状特征、可以包含一个文字的对称的块状特征，特征值主要为x， y方向上导数的平均值与标准差：
+他们选择的第一类特征基于上述观察结果，设计了对应于$x， y$方向上导数的块状特征、可以包含一个文字的对称的块状特征，特征值主要为$x， y$方向上导数的平均值与标准差：
 \begin{figure}[H]
     \centering 
     \includegraphics[width=0.618\textwidth]{image/2_1_1_7.jpg}    
     \label{logic}
+    \caption{块状模式。在这个区域里计算的平均值有低熵，因为在上图中的波动已经被平均所消除。}
 \end{figure}
-一个好的特征f(I)可以很好地区分两个概率分布函数P(f(I)|text)与P(f(I)|non-text)，若P(f(I)|text)可以有一个很强的峰，则说明这个特征具有低熵值性。
+一个好的特征f(I)可以很好地区分两个概率分布函数$P(f(I)|text)$与$P(f(I)|non-text)$，若$P(f(I)|text)$可以有一个很强的峰，则说明这个特征具有低熵值性。
 
 他们选择的第二类特征基于强度、梯度方向、强度梯度值的直方图，更加复杂一些：
 
@@ -83,10 +144,11 @@ $$e = \min(S+ + (T^- - S^-)， S^-  + ( T^+ - S^+))$$
     \centering 
     \includegraphics[width=0.618\textwidth]{image/2_1_1_8.jpg}    
     \label{logic}
+    \caption{原图(左上)有单峰的亮度直方图(右上)。但是联合直方图的题图显示有两个峰(左下)，右下为其轮廓。亮度直方图被有高亮度梯度和亮度值的边像素所污染。它在前景与背景之间，亮度梯度信息可以用来帮助}
 \end{figure}
 他们还选择了更加复杂的第三类特征，只用于级联分类器后面的阶段。第三类特征基于边缘检测，通过强度梯度阈值化、边缘连接处理。这一类特征可以计算延长的边缘的数量。具有比较低的熵值。
 
-在使用级联的Adaboost强分类器以后，他们做了二值化操作与一些扩展操作，再将车牌送入商业OCR软件进行识别。这两步操作对我们有一定的借鉴意义。
+在使用级联的Adaboost强分类器以后，他们做了二值化操作与一些扩展操作，再将车消除这种污染。牌送入商业OCR软件进行识别。这两步操作对我们有一定的借鉴意义。
 
 他们首先使用了Niblack提出的自适应的二值化算法的变种（Wolf认为该算法与Yanowitz-Bruckstein的方法是最成功的二值化算法）：
 $$T_r(x)=\mu_r(x)+k\cdot \sigma_r(x)$$
@@ -95,8 +157,8 @@ $$r(x)=\min_r(\sigma_r(x)>T_\sigma),$$
 其中，$T_\sigma$是一个固定的阈值，认为标准差小于$T_\sigma$的窗口为平滑的区域。K是固定的。
 
 作者接着使用了连通区域算法对字符区域进行扩展，因为有时使用Adaboost算法得到的字符区域是不完整的。
-\subsubsection{Louka的 License Plate Detection Using AdaBoost}
-Louka 的论文衡将文本提取的方法（Chen and Yuille）与人脸检测的方法(Viola and Jones) 应用到 了LPR(license Plate Recognition)系统，并对这种方法进行评估。
+\subsubsection{License Plate Detection Using AdaBoost}
+Louka 的论文\cite{plate_dection_using_adaboost}衡将文本提取的方法（Chen and Yuille）与人脸检测的方法(Viola and Jones) 应用到 了LPR(license Plate Recognition)系统，并对这种方法进行评估。
 
 他提到，通过PCA分析，发现车牌需要的components比Chen和Yuille的文本要少很多，因为字体、朝向都是比较固定的。他选择特征的标准与Chen 和 Yuille 一样，希望有比较低的熵值（在所有的车牌上的检测结果比较相似），而又可以很好地区分车牌区域与非车牌区域。
 
@@ -105,58 +167,74 @@ Louka 的论文衡将文本提取的方法（Chen and Yuille）与人脸检测�
     \centering 
     \includegraphics[width=0.618\textwidth]{image/2_1_3_1.jpg}    
     \label{logic}
+    \caption{$x$(a)和中$y$(b)的导数绝对值平均,以及$x$的方差导数(c),$y$的方差导数$d$。}
 \end{figure}
 x方向上的导数的统计特征与Chen and Yuille的相似，而在y方向上可以明显看到车牌上7个字符到来的导数的变化。根据这一观察结果，他们选择了 Haar-like 特征，将扫描窗口水平或垂直地分为2-7个大小相等的子区域，特征值为一部分子区域上某些值的和减去剩下的子区域上的同一类值的和。示例如下图：
 \begin{figure}[H]
     \centering 
     \includegraphics[width=0.618\textwidth]{image/2_1_3_2.jpg}    
     \label{logic}
+    \caption{AdaBoost所选择的特征类型。有颜色区域之和被减去了无颜色区域之和。}
 \end{figure}
 用于求和并相减的值为，像素强度，导数，导数方差。每个特征训练生成一个弱分类器，在这篇论文中作者使用了类条件密度来训练弱分类器，这里没有使用阈值，而是当车牌的类条件密度比非车牌条件密度的大时，判断为车牌。如下图所示：
 \begin{figure}[H]
     \centering 
     \includegraphics[width=0.618\textwidth]{image/2_1_3_3.jpg}    
     \label{logic}
+    \caption{弱分类器特征的典型类条件密度。这里有明显的大量的错误无法在分类时避免，然而，该错误远远比AdaBoost生效所需的50\%要低。}
 \end{figure}
-这里也使用了Integral Image的方法，对于像素强度，导数，倒数方差都可以计算出Integral Image，减少计算时间。方差可以由下面的公式，通过Integral Image，快速得到。
-\begin{figure}[H]
-    \centering 
-    \includegraphics[width=0.618\textwidth]{image/2_1_3_4.jpg}    
-    \label{logic}
-\end{figure}
+这里也使用了积分图像的方法，对于像素强度，导数，倒数方差都可以计算出积分图像，减少计算时间。方差可以由下面的公式，通过积分图像，快速得到。
+$$\sigma^2=m^2-\frac{1}{N}\sum x^2$$
+其中$m$为平均值而$x$为某一像素的亮度导数。\\
 另外，本文使用了聚类的方法，使用每一个group的均值将检测到的包含同一车牌的临近区域进行合并。
 
 最后，本文对错误分类的情况进行分析，并给出了一些解决方案。比如，利用比较容易检测的车尾灯，通过检测到的区域距离车尾灯的距离来进一步判断该区域是否为车牌区域。
 
 \subsubsection{Real-Time License Plate Recognition on an Embedded DSP-Platform}
-这篇论文在嵌入式DSP平台上实现了一个功能完整的车牌检测与识别系统，可以实时地从视频流中提取出车牌。主要有检测与识别两个模块，我们在车牌定位这一部分中首先描述它的检测模块。整个系统的工作示意图如下：
+这篇论文\cite{rtl_plate_recoginition_on_edsp}在嵌入式DSP平台上实现了一个功能完整的车牌检测与识别系统，可以实时地从视频流中提取出车牌。主要有检测与识别两个模块，我们在车牌定位这一部分中首先描述它的检测模块。整个系统的工作示意图如下：
 \begin{figure}[H]
     \centering 
-    \includegraphics[width=0.618\textwidth]{image/2_1_4_1.jpg}    
+    \includegraphics[width=1\textwidth]{image/2_1_4_1.jpg}    
     \label{logic}
+    \caption{该系统包含两个主要模块。给定一个图像序列作为输入，检测模块将检测以及追踪车。而在第二个模块，将会进行图像分割以及字符识别并生成最终结果。}
 \end{figure}
 \paragraph{检测部分}
 检测部分基于Viola 和 Jones的framework，但是根据后续的论文做了很多改进。
 \begin{enumerate}
 \item
-使用了RealBoost算法，使用confidence rated predictions代替了二元的分类标签。
-算法基本与Adaboost一致，如下图所示：
-\begin{figure}[H]
-    \centering 
-    \includegraphics[width=0.618\textwidth]{image/2_1_4_2.jpg}    
-    \label{logic}
-\end{figure}
+使用了RealBoost算法，使用自信率预测代替了二元的分类标签。
+算法基本与Adaboost一致，如下所示：
+\begin{algorithm}
+\caption{自信率预测}
+    \begin{algorithmic}[1]
+    \State 允许弱假设预测自信度
+    \State 形式上，让$h_t:X\rightarrow R$    
+    $$
+    \begin{aligned}
+        sign(h_t(x))&=prediction\\
+        |h_t(x)|&=confidence
+    \end{aligned}
+    $$
+    \State 使用同样的更新:
+    $$D_{t+1}(i)=\frac{D_t(i)}{Z_t}\cdot \exp(-\alpha_ty_ih_t(x_i))$$
+    以及组合弱假设的相同规则
+    \end{algorithmic}
+\end{algorithm}
 \item
-为级联分类器添加了 inter stage feature propagation（Sochman and Matas, Inter-stage Feature Propagation in Cascade Building with AdaBoost）
+为级联分类器添加了阶段间特征传递\cite{inter_feature_propgation}
 
 这篇论文的核心思想在于，作者认为，在Viola and Jones 提出的级联算法中，每一个阶段的分类器，都生成了一个新的训练集，然后使用Adaboost算法在一个全新的问题上跑出的结果，这个分类器完全抛弃了前面的阶段中的生成的分类器。
 
 他们认为，前一个阶段生成的分类器对于当前的新的训练集，还是可以作为当前分类器的一部分（当前分类器的起点，第一个弱分类函数），只需要调整一下阈值，因为前面的阶段为了保证不把人脸误判为非人脸，会特意调低阈值。
-\begin{figure}[H]
-    \centering 
-    \includegraphics[width=0.618\textwidth]{image/2_1_4_3.jpg}    
-    \label{logic}
-\end{figure}
+$$H_s(x)=sign(f_s(x)-\gamma_s)$$
+$$f_s(x)=\alpha_0H'_{s-1}(x)+\sum_{t=1}^T\alpha_th_t(x)$$
+其中
+$$\alpha_0=\frac{1}{2}\ln{\frac{1-\epsilon_0}{\epsilon_0}}$$
+而且$H'_{s-1}$是前一个阶段带有阈值$\tau_s$的弱分类器
+$$H'_{s-1}(x)=sign(f_{s-1}(f_{s-1}(x)-\tau_s))$$
+原弱分类器的带权错误$\epsilon_0$
+$$\epsilon_0=\sum_{i=1}^mD_0(i)[sign(f_{s-1}(x_i)-\tau_s)\neq y_i]$$
+其中$D_0(i)$是第$i$个数据$x_i,y_i$的权重。而阈值$tau_s$将被设置为最小的$\epsilon_0$
 将前一个阶段的得到的分类器作为当前分类器的第一个弱分类器有以下原因：
 \begin{enumerate}
 \item
@@ -164,64 +242,87 @@ x方向上的导数的统计特征与Chen and Yuille的相似，而在y方向上
 \item
 它可以将Adaboost的学习过程集中于解决没有被前面阶段所解决的分类问题。
 \item
-3.	这样的分类器有一个很大的优势是，前一个阶段的$f_s(x)$都在上一阶段已经计算过了，所以$H^’_{s-1}(x)$的计算成本很低，作者称之为zero evaluation cost。
+3.	这样的分类器有一个很大的优势是，前一个阶段的$f_s(x)$都在上一阶段已经计算过了，所以$H^’_{s-1}(x)$的计算成本很低，作者称之为零计算成本。
 \end{enumerate}
-实验表明，使用inter-stage feature后，可以使用更少的层数，达到同样的false positive rate 与 false negative rate，同时没有增加计算复杂度。而且比Viola and Jones的cascede快了25\%。
+实验表明，使用跨阶段特征后，可以使用更少的层数，达到同样的假阳性与假阴性，同时没有增加计算复杂度。而且比Viola and Jones的级联快了25\%。
 \item
-特征池中增加了边沿朝向直方图特征(EOH)（Kobi Levi and Yair Weiss, Learning Object Detection from a Small Number of Examples: the Importance of Good Features.）
+特征池中增加了边沿朝向直方图特征(EOH)\cite{learning_object_dection}
 
-Levi的这篇论文致力于寻找在很小的训练集上也能表现得很好的特征。他们使用edge orientation histograms(EOH)，并且证明这种特征能够达到上述目的。
+Levi的这篇论文致力于寻找在很小的训练集上也能表现得很好的特征。他们使用边方向直方图(EOH)，并且证明这种特征能够达到上述目的。
 
 EOH的示意图与其他特征的对比图如下：
 \begin{figure}[H]
     \centering 
-    \includegraphics[width=0.618\textwidth]{image/2_1_4_4.jpg}    
+    \includegraphics[width=1\textwidth]{image/2_1_4_4.jpg}    
     \label{logic}
+    \caption{我们展示使用局部方向直方图在脸的子区域可以大幅提高性能，而只使用强度平均特征将大大降低性能。}
 \end{figure}
 选择EOH的理由有：EOH与全局光照的变化无关，并且能够捕捉到前两种特征很难捕捉到的几何特性。
 
 EOH的获得，首先使用了sobel masks，因为他们简洁并高效。若将边沿朝向分为K个组，则每个像素点获得K个特征值$(\phi_k(x, y))$：
-\begin{figure}[H]
-    \centering 
-    \includegraphics[width=0.618\textwidth]{image/2_1_4_5.jpg}    
-    \label{logic}
-\end{figure}
+我们可以使用Sobel算子计算点$(x,y)$的梯度，
+$$G_x(x,y)=Sobel_x\times I(x,y)$$
+以及
+$$G_y(x,y)=Sobel_y\times I(x,y)$$
+其中$Sobel_x$和$Sobel_y$分别是$x$和$y$ Sobel算子。边在点$(x,y)$的强度为:
+$$G(x,y)=\sqrt{G_x(x,y)^2+G_y(x,y)^2}$$
+为了忽略噪声，我们对$G(x,y)$阈值化
+$$G'(x,y)\left\{
+\begin{aligned}
+G(x,y) & \quad if \quad G(x,y)\geq T \\
+0 & \quad otherwise
+\end{aligned}
+\right.
+$$
+Sobel算子的一个主要缺陷是我们必须手动设置阈值。在我们的实验中，阈值被设置在80到110之间。\\
+边的导向为
+$$\theta(x,y)=\arctan{\frac{G_y(x,y)}{G_x(x,y)}}$$
+我们接下来将所有的边分成$K$分，我们将第$k$个部分的值记为
+$$\Phi_k(x,y)\left\{
+\begin{aligned}
+G(x,y) & \quad if\quad \theta(x,y)\in bin_k \\
+0 & \quad otherwise
+\end{aligned}
+\right.
+$$
+我们发现$K$在4到8之间系统的普遍性较好并且只需要有限的内存。\\
 在每个子窗口上定义$E_k$：
 $$E_k(R)=\sum_{(x,y)\in R}\Phi_k(x,y)$$
 类似前面的描述，EOH特征也可以通过Integral Image的方式快速获得。接下来，论文定义了一系列EOH特征：
 $$A_{k1,k2}(R)=\frac{E_{k1}(R)+\epsilon}{E_{k2}(R)+\epsilon}$$
 通过设定阈值，该特征决定了，相对于k2朝向而言，k1朝向是否有决定性作用。
 
-dominant orientation feature:
+主导方向特征:
 $$B_k(R)=\frac{E_k(R)+\epsilon}{\sum_iE_i(R)+\epsilon}$$
 
-symmetry features: 
+对称特征: 
 $$Symm(R_1,R_2)=\frac{\sum_{k \in K}|E_k(R_1)-E_k(R_2)|}{sizeof(R_1)}$$
 实验表明，使用EOH系列特征，可以从很小的数据库（250张正面脸）中学习，并获得很好的表现。另外，论文将EOH特征作用在区分椅子的应用中，也取得了很好的效果。所以，EOH特征是一种很好的特征，可以用于多种物体的检测。
 \paragraph{Post-processing 部分}
-处理包含同一车牌的许多区域，使用了non-maximum suppression方法，选择confidence value最大的区域代表这一组检测到的区域。
+处理包含同一车牌的许多区域，使用了非最大值抑制方法，选择confidence value最大的区域代表这一组检测到的区域。
 \paragraph{Tracker部分}
 一个Kalman tracker被整合到了系统中，Tracker主要用于更新并且预测同一张车牌在视频后面的帧中的位置，然后将检测器的搜索范围限定在一定的区域内，这样会比重新扫描整张图片快。另外，tracker对字符分类步骤也有很大的帮助。如下图所示：
 \begin{figure}[H]
     \centering 
     \includegraphics[width=0.618\textwidth]{image/2_1_4_6.jpg}    
     \label{logic}
+    \caption{上图描述了所有动态和静态的可能场景。在这个情况下，物体被假设从图中上部进入，一个追踪器预测物体在下一帧中的出现，将搜索限制在小的范围之内。}
 \end{figure}
 \end{enumerate}
 
-\subsection{R. F. Prates, G. Cámara-Chávez, William R. Schwartz2, and D. Menotti, Brazilian License Plate Detection Using Histogram of Oriented Gradients and Sliding Windows }
-在这篇论文中，作者将Dalal提出的用于人体检测的HOG算法应用到巴西车牌检测系统中去，实现了大于98\%的recall，大于78\%的precision。
+\subsection{Brazilian License Plate Detection Using Histogram of Oriented Gradients and Sliding Windows }
+在这篇论文\cite{brzl_licence_detect_histogram}中，作者将Dalal提出的用于人体检测的HOG算法应用到巴西车牌检测系统中去，实现了大于98\%的查全率，大于78\%的正确率。
 
 整体流程见下图：
 \begin{figure}[H]
     \centering 
-    \includegraphics[width=0.618\textwidth]{image/2_2_1.jpg}    
+    \includegraphics[width=1\textwidth]{image/2_2_1.jpg}    
     \label{logic}
 \end{figure}
 主要算法流程：
 \begin{enumerate}
 \item 
-图像被分成若干个cell，对于每个cell，可以计算得到一张朝向梯度的直方图（HOG）。
+图像被分成若干个单元，对于每个单元，可以计算得到一张朝向梯度的直方图（HOG）。
 
 使用1维Sobel算子得到x、y方向上的梯度：
 $$dx=I(x+1,y)-I(x-1,y)$$
@@ -230,16 +331,16 @@ $$dy=I(x,y+1)-I(x,y-1)$$
 $$m(x,y)=\sqrt{dx^2+dy^2}$$
 $$\theta(x,y)=\arctan(\frac{dy}{dx})$$
 \item
-为了使得特征不受光照强度、对比度的影响，有效的局部对比度正规化（normalization）对于好的表现是必要的。
+为了使得特征不受光照强度、对比度的影响，有效的局部对比度正规化对于好的表现是必要的。
 
-Cells被组成block，对于每个block进行正规化操作。Block是重叠的，所以一个cell可以属于多个block，获得不同的normalization。最后每个cell的描述符为他所从属的所有在detection window中的block的所有components所组成的向量。
+单元们被组成块，对于每个块进行正规化操作。块是重叠的，所以一个单元可以属于多个块，获得不同的正规化。最后每个单元的描述符为他所从属的所有在检测窗口中的块的所有组件所组成的向量。
 
-这里，为了效率，选择L1-norm作为正则化的方法：
+这里，为了效率，选择L1范数作为正则化的方法：
 $$v'=\frac{v}{\sqrt{||v||^2_2+\epsilon^2}}$$
-$v$是一个给定block中所有cell的直方图向量。
+$v$是一个给定块中所有单元的直方图向量。
 通常也会使用高斯函数，给中心的像素点更高的权重。
 \item
-使用magnitude与orientation，就可以构造出朝向梯度直方图。即，按照orientation放到不同的bin中，magnitude作为权重，在Dalal的论文中，为了使得介于两个bin之间的orientation可以获得更好的分类，所以会将每个像素点放到两个bin中，权重为将他的magnitude按照他的orientation到两个相邻bin的距离按比例分配。
+使用数量级与方向，就可以构造出朝向梯度直方图。即，按照方向放到不同的直方中，数量级作为权重，在Dalal的论文中，为了使得介于两个直方之间的方向可以获得更好的分类，所以会将每个像素点放到两个直方中，权重为将他的数量级按照他的方向到两个相邻直方的距离按比例分配。
 \item
 为了检测出不同尺度的车牌，对每一章图片，构造尺度不同的金字塔。
 \item
@@ -249,44 +350,56 @@ $v$是一个给定block中所有cell的直方图向量。
 LBP（local binary pattern）也是一种特征向量。他是这么计算的：
 \begin{enumerate}
 \item
-将整个检测窗口分成cells（例如，16*16）
+将整个检测窗口分成单元（例如，16*16）
 \item
 对于每个cell中的每个像素，将它与它的8个相邻像素点相比较。若中心像素点的值大于邻居的，则写0，反之则写1。这样，每个像素点就有了1个8位二进制数字。
 \begin{figure}[H]
     \centering 
     \includegraphics[width=0.618\textwidth]{image/2_3_1.jpg}    
     \label{logic}
+    \caption{三个邻近数据被用来定义材质并用来计算LBP。}
 \end{figure}
 \item
-对每个cell，计算直方图，即每种8位二进制数字的频率。这个直方图可以看做是256维的特征向量。
+对每个单元，计算直方图，即每种8位二进制数字的频率。这个直方图可以看做是256维的特征向量。
 \item
-可以选择性地normalize histogram。方法类似HOG特征的normalization。
+可以选择性地正规化直方图。方法类似HOG特征的正规化。
 \item
 将检测窗口中所有cell的直方图连接起来，作为整个检测窗口的特征向量。
 \end{enumerate}
 获得的特征向量可以使用SVM或其他机器学习算法进行分类。
 
-一种实用的扩展是将所有uniform pattern（如果一个local binary pattern至多只有2个0-1或1-0的变化，例如00010000）分为一类。这样，可以将每个cell的特征向量的长度从256维减少到59维。
+一种实用的扩展是将所有均匀特征（如果一个局部二值特征至多只有2个0-1或1-0的变化，例如00010000）分为一类。这样，可以将每个cell的特征向量的长度从256维减少到59维。
 
 LBP特征主要用于人脸识别与纹理分析。openALPR的开发者解释到，Haar与LBP非常相似。区别在于LBP更快一些，特别是在一些没有浮点数处理器的嵌入式设备上。Haar可能给出略微更好一些的结果，但是Haar的训练时间很慢。另外，LBP具有在所有的东西上都能工作得很好的特性，不像一些其他检测器，只能作用在黑白车牌上。
-\subsection{Jiri Matas, Karel Zimmermann, Unconstrained Licence Plate and Text Localization and Recognition.}
-该方法在后来被称为MSER（Maximally Stable Extremal Region）方法。该方法被认为是计算机视觉中最有趣的点检测器之一。
+\subsection{Unconstrained Licence Plate and Text Localization and Recognition}
+该方法\cite{un_lic_plate_and_text}在后来被称为MSER（Maximally Stable Extremal Region）方法。该方法被认为是计算机视觉中最有趣的点检测器之一。
 
 MSER是图片中的像素极值区域，即该区域的所有像素值均比他的外边界大（MSER+），或者该区域的所有像素值均比他的外边界小（MSER-）。MSER特征对光照变化具有不变性。
 
 寻找MSER的线性时间算法如下：
-\begin{figure}[H]
-    \centering 
-    \includegraphics[width=0.618\textwidth]{image/2_4_1.jpg}    
-    \label{logic}
-\end{figure}
-其中，I is the image and R, R∗ are set of current extremal regions (appropriate to the threshold T) and set of CSER (subset of extremal regions), respectively. 
+\begin{algorithm}
+\caption{CSER检测算法}
+    \begin{algorithmic}[1]
+    \State $T=1, R^*=\emptyset, R=\emptyset$
+    \ForAll{所有的像素 p 满足 $L(p)=T$}
+        \State 添加像素：如果$\exists!r_i\in R, i=1...n, p \in \partial r_i$ 那么$r_i=r_i \cup p$。
+        \State 合并区域： 如果$\exists r_i,r_j \in R,i,j=1..n, i \neq j, p \in \partial r_i \land p \in \partial r_j$ 那么 $r_i=r_i \cup r_j \cup p \land R=R\setminus r_j$
+        \State 新区域：如果$\not \exists r_i \in R,i,j=1..n, p \in \partial r_i$那么$r_{n+1}=p, R=R \cup r_{r_n+1}$
+    \EndFor
+    \State 对于每一个新增或改变的区域$r \in R$，重新计算器特征。阳性分类区域$r_i$为CSER
+    $$R^*=R^* \cup r_i$$
+    \State 如果$T < T_{max}$,那么$T=T+1$以及回到2，否则结束。
+    \end{algorithmic}
+\end{algorithm}
+
+其中，I 是图像。 而$R$, $R^∗$ 分别是当前外部区域集合(适当的阈值T) 和CSER(外部区域的子集)。
 
 找到了图像中所有的MSER后，这里以白底黑字的车牌为例，介绍如何定位车牌，其他类型的车牌二值化后可能需要反色来达到白底黑字的效果 。
 \begin{figure}[H]
     \centering 
     \includegraphics[width=0.618\textwidth]{image/2_4_2.jpg}    
     \label{logic}
+    \caption{MSER可以被用作视频序列车牌检测，MSER+可以找到车牌，而MSER-则可以分辨上面的字符。}
 \end{figure}
 可以看到，车牌本身是一块MSER+，而他里面的字符是MSER-。所以我们寻找的是一个较大的MSER+，包含一组较小的MSER-。同时，我们制定一系列规则，来进一步筛选车牌：
 \begin{enumerate}
@@ -300,8 +413,8 @@ MSER+的高度与MSER-高度的平均值相近
 MSER+至少包含了3个MSER-
 \end{enumerate}
 这样筛选出来的MSER+就是车牌区域，而MSER-区域可以作为车牌字符分割的结果。所以MSER方法是非常高效的。
-\subsection{于深洋的硕士论文《自然环境下的车牌定位与字符分割方法的研究》}
-这篇论文的第三章使用了粗定位与精确定位两个阶段，组合了多种方法，实现了车牌定位。通过车牌粗定位，车牌候选区域将从图像内众多的区域中保存并突现出来；通过车牌精确定位，车牌在图像中的位置将得到更加准确的定位，而且粗定位后残留下来的伪车牌区域也将被剔除。 
+\subsection{自然环境下的车牌定位与字符分割方法的研究}
+这篇论文\cite{ysy_natrue}的第三章使用了粗定位与精确定位两个阶段，组合了多种方法，实现了车牌定位。通过车牌粗定位，车牌候选区域将从图像内众多的区域中保存并突现出来；通过车牌精确定位，车牌在图像中的位置将得到更加准确的定位，而且粗定位后残留下来的伪车牌区域也将被剔除。 
 
 车牌定位算法的整体思路简述如下:
 \begin{enumerate}
@@ -311,13 +424,14 @@ MSER+至少包含了3个MSER-
     \centering 
     \includegraphics[width=0.618\textwidth]{image/2_5_1.jpg}    
     \label{logic}
+    \caption{高度筛选后的二值图像}
 \end{figure}
 \item
 对图中所有高度适合的连通区域进行水平聚类，剔除横纵比、面积、梯度密度超出阈值范围的聚类区域，这样保留下来的每个聚类区域就作为一个车牌候选区域，粗定位阶段处理完毕。 判定两区域水平相关（可以聚为一个类）的准则关系如下：
 $$\left\{
 \begin{aligned}
 |Y^i_{Mid}-Y^j_{Mid}| & \leq \Delta y \\
-X^j_{Min}-X^i_{Max} & = \leq \Delta X\\
+X^j_{Min}-X^i_{Max} & \leq \Delta X\\
 |H_j-H_i| & = \Delta xy
 \end{aligned}
 \right.
@@ -331,24 +445,22 @@ $$
 算法：
 \begin{enumerate}
 \item
-读入二值梯度图像中所有高度适合的连通区域，将它们按照区域左边缘水平坐标从小到大的顺序排列得到b1, b2, …, bm。
+读入二值梯度图像中所有高度适合的连通区域，将它们按照区域左边缘水平坐标从小到大的顺序排列得到$b_1, b_2, …, b_m$。
 \item
-从i=1开始，按顺序取得一个连通区域bi。 
+从$i=1$开始，按顺序取得一个连通区域$b_i$。 
 \item
-若该区域bi已经标记左或右邻近区域的标号，则i++，转回(b)。 
+若该区域$b_i$已经标记左或右邻近区域的标号，则$i+1$，转回(b)。 
 \item
-将该区域bi 作为一个水平区域聚类的头区域，初始化此聚类区域的属性集合即bi 的属性集合，开始下边的计算。  
+将该区域$b_i$ 作为一个水平区域聚类的头区域，初始化此聚类区域的属性集合即$b_i$ 的属性集合，开始下边的计算。  
 \item
-在 bi 的右侧找寻第一个满足水平相关准则的相关右邻接区域 bj。  
+在$b_i$的右侧找寻第一个满足水平相关准则的相关右邻接区域$b_j$。  
 \item
-若找到bj，则标记好bi和bj邻接关系，合并两区域bi =bi ∪bj，重新计算bi 的属性集合，转回 5。 若找不到bj ，则i++，转回2，开始遍历下一个水平区域聚类。  
+若找到$b_j$，则标记好$b_i$和$b_j$邻接关系，合并两区域$b_i=b_i \cup b_j$，重新计算$b_i$ 的属性集合，转回 5。 若找不到$b_j$ ，则$i+1$，转回(b)，开始遍历下一个水平区域聚类。  
 \end{enumerate}
-水平区域的帅选规则如下：
-\begin{figure}[H]
-    \centering 
-    \includegraphics[width=0.618\textwidth]{image/2_5_2.jpg}    
-    \label{logic}
-\end{figure}
+设谋区域聚类$i$的各属性为：外接矩形$Rect^i$，高度$H^i$,宽度$W^i$，梯度密度$\rho^i_{Grad}$，则具体筛选规则描述如下：
+$$Del\quad i\quad Subject\quad to$$
+$$\{\frac{H^i}{W^i}\}\cup\{(W^i\times H^i)\not \in \Omega^S\}
+\cup \{\rho^i_{Grad}<\Delta \rho_{Grad}\}\cup \{(Rect^i/2)\subseteq Rect^j\}$$
 这里选择的是较为宽松的阈值范围，为了不把真的车牌误删。而选入的非车牌区域可以在精确定位时被舍弃。
 \item
 车牌区域精确定位。
@@ -375,9 +487,9 @@ $$
 在寻找车牌左右边界时，我们以候选区域的高度作为标度创建平移窗口。 设候选区域高度为 H，宽度为 W，确定左右边界过程如下：
 \begin{enumerate}
 \item
-当W ≤ H*6时，不用再确定车牌的左右边界，原候选区域即车牌的精确定位位置，只须以整个候选区域作为窗口判断出车牌的种类即可；
+当$W \leq H\times 6$时，不用再确定车牌的左右边界，原候选区域即车牌的精确定位位置，只须以整个候选区域作为窗口判断出车牌的种类即可；
 \item
-当W > H*6时，按照宽度为 H*6，高度为 H 的窗口水平移动扫描候选区域，通过窗口平移找到每种配色方案概率值最大的窗口位置，比较这几种车牌配色的概率极值，最终取概率极值最大配色作为车牌种类，而该极值配色对应的窗口区域即为车牌的精确定位位置。 
+当$W > H\times 6$时，按照宽度为 $H \times 6$，高度为 $H$ 的窗口水平移动扫描候选区域，通过窗口平移找到每种配色方案概率值最大的窗口位置，比较这几种车牌配色的概率极值，最终取概率极值最大配色作为车牌种类，而该极值配色对应的窗口区域即为车牌的精确定位位置。 
 \item
 并且设定一个最小配色概率阈值，若当前极值配色概率值小于最小配色概率阈值，则认为该区域没有车牌，该区域为伪车牌。
 \end{enumerate}
@@ -430,7 +542,7 @@ PlateLocate就是比较关键的车牌定位，流程如下：
 \item
 筛选。对轮廓求最小外接矩形，然后验证，不满足条件的淘汰。
 尺寸判断：
-中国车牌的一般大小是440mm*140mm，面积为440*140，宽高比为3.14。
+中国车牌的一般大小是$440mm\times 140mm$，面积为$440\times 140$，宽高比为3.14。
 使用如下方法判 断矩形是否是车牌:
 \begin{enumerate}
 \item
@@ -454,13 +566,14 @@ PlateLocate就是比较关键的车牌定位，流程如下：
     \label{logic}
 \end{figure}
 \item
-统一尺寸。作者使用了136*36。
+统一尺寸。作者使用了$136 \times 36$。
 \end{enumerate}
 整个过程流程图表示如下：
 \begin{figure}[H]
     \centering 
-    \includegraphics[width=0.618\textwidth]{image/2_6_1_7.jpg}    
+    \includegraphics[width=1\textwidth]{image/2_6_1_7.jpg}
     \label{logic}
+    \caption{plateLocate流程图}
 \end{figure}
 \subsubsection{颜色定位与偏斜扭正}
 2.6.1节介绍的Sobel法最大的问题在于面对垂直边缘交错的情况下，无法准确定位车牌：
